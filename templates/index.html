@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UST Library Search × Claude — MCP Proof of Concept</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">Proof of concept &middot; not an official library service</p>
+    <h1>UST Library Search <span class="times">&times;</span> Claude</h1>
+    <p class="sub">A Model Context Protocol (MCP) server that lets an AI assistant search the
+    University of St.&nbsp;Thomas library catalog directly — so answers come from the library's
+    curated records, with links back to the real items.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>What this is</h2>
+  <p>When students ask an AI assistant for sources, it typically answers from the open web —
+  or invents citations. Yale and Northeastern have both piloted a fix: a small
+  <a href="https://modelcontextprotocol.io">MCP</a> server that gives the assistant a
+  <em>search-the-library</em> tool. The assistant decides when to use it, the library's own
+  discovery index does the searching, and every result carries a permalink into the catalog.
+  Yale's student testing found this visible provenance measurably increased trust in AI outputs.</p>
+  <p>This site is that idea, working, for UST. It wraps the same public, unauthenticated search
+  endpoint that powers <a href="https://librarysearch.stthomas.edu">librarysearch.stthomas.edu</a>
+  (Alma + Primo VE via CLIC/MnPALS). Nothing is scraped, no credentials are used, and no
+  student data is stored.</p>
+</section>
+
+<section>
+  <h2>Try the data it returns</h2>
+  <p>This demo box calls the same backend function Claude calls. Default scope is
+  <strong>UST's own catalog records only</strong> (see decision #1 below).</p>
+  <form id="demo" autocomplete="off">
+    <input type="text" id="q" placeholder='Try "Dante Divine Comedy" or "civil rights Minnesota"' aria-label="Search query">
+    <button type="submit">Search</button>
+  </form>
+  <div id="results" aria-live="polite"></div>
+</section>
+
+<section>
+  <h2>Try it inside Claude</h2>
+  <ol class="steps">
+    <li>In Claude (web or desktop), open <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong>.</li>
+    <li>Name it <em>UST Library Search</em> and paste this URL:
+      <code id="mcp-url">{ this page's URL }/mcp</code></li>
+    <li>Start a chat and ask: <em>&ldquo;What does the UST library have on Dante's Divine Comedy?&rdquo;</em></li>
+  </ol>
+  <p>Claude will call the server's two tools — <code>search_catalog</code> and
+  <code>get_record</code> — and answer from real catalog records, citing permalinks.
+  No login is required because the underlying catalog search is already public.</p>
+</section>
+
+<section>
+  <h2>Key decisions before institutional adoption</h2>
+  <p>This prototype works, but it deliberately leaves the real decisions to the library.
+  Per Dan Cohen's framing at Northeastern: this technology should be
+  <em>library-driven and library-controlled</em>.</p>
+
+  <dl class="decisions">
+    <dt>1 &middot; Data scope: UST records only, or the full blended index?</dt>
+    <dd>Primo searches can include Ex Libris's proprietary Central Discovery Index (articles
+    and content beyond UST's own records). Whether UST may expose that index through its own
+    AI tooling is a contract question currently with library leadership. <strong>This prototype
+    defaults to UST's own catalog records only</strong>, which libraries are generally free to
+    use — the blended scope exists in the code but is opt-in and clearly labeled.</dd>
+
+    <dt>2 &middot; Which API endpoint?</dt>
+    <dd>The prototype uses Primo's public UI endpoint (<code>pub/pnxs</code>): rich results, no
+    key, but technically internal — Ex Libris could change it. A production version should
+    weigh the officially sanctioned <code>external/pnxs</code> endpoint (capped at 10 results
+    per call) or a keyed Primo Search API arranged through CLIC/Ex Libris.</dd>
+
+    <dt>3 &middot; Governance and hosting</dt>
+    <dd>Who owns, reviews, and operates the service: the library, ITS, or both? This instance
+    runs on Google Cloud Run for about the cost of a coffee per month, but an adopted version
+    belongs on institutionally managed infrastructure with a security review — the code is
+    ~300 lines of Python and was written to be auditable in one sitting.</dd>
+
+    <dt>4 &middot; Access control and privacy</dt>
+    <dd>The catalog data is public, so this endpoint is open. An institutional version should
+    decide: open to the world, UST accounts only, or bundled into UST's planned AI platform?
+    And set an explicit logging policy — search queries can be sensitive, and this prototype
+    intentionally stores none.</dd>
+
+    <dt>5 &middot; Which AI platforms?</dt>
+    <dd>MCP is an open standard: the same server works with Claude, ChatGPT, open-source
+    models, and whatever UST's AI platform adopts. Piloting in Claude first mirrors Yale and
+    Northeastern, but nothing here is vendor-locked — and library content accessed this way
+    is not used for model training.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Context</h2>
+  <ul class="refs">
+    <li>Yale Library, <a href="https://library.yale.edu/news/yale-library-testing-ai-powered-connection-deeper-searching-library-resources">&ldquo;Yale Library is testing an AI-powered connection for deeper searching of library resources&rdquo;</a> (March 2026)</li>
+    <li>Dan Cohen (Northeastern), <a href="https://newsletter.dancohen.org/archive/the-librarys-new-entryway/">&ldquo;The Library's New Entryway&rdquo;</a> (October 2025)</li>
+    <li>Source code: <a id="repo-link" href="https://github.com/thomasfeeney/ust-primo-mcp">github.com/thomasfeeney/ust-primo-mcp</a></li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built by Tom Feeney (Philosophy) as a proof of concept for discussion with UST Libraries
+    &amp; ITS. It reads only public catalog data, stores nothing, and can be switched off at any
+    time. Questions: thomas.feeney@stthomas.edu</p>
+  </div>
+</footer>
+
+<script>
+// Show the real MCP URL for this deployment.
+document.getElementById('mcp-url').textContent = location.origin + '/mcp';
+
+const form = document.getElementById('demo');
+const results = document.getElementById('results');
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  results.innerHTML = '<p class="muted">Searching the UST catalog&hellip;</p>';
+  try {
+    const resp = await fetch('/api/search?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    if (data.error) { results.innerHTML = '<p class="muted">' + data.error + '</p>'; return; }
+    let html = '<p class="muted">' + (data.total_ust_records ?? 0) +
+      ' UST catalog records match. Showing ' + data.returned + ':</p>';
+    for (const r of data.records) {
+      html += '<div class="rec">' +
+        '<a href="' + (r.permalink || '#') + '" target="_blank" rel="noopener"><strong>' +
+        (r.title || '(untitled)') + '</strong></a>' +
+        '<div class="meta">' +
+        [r.creator, r.type, r.date, r.location || (r.online ? 'online' : null)]
+          .filter(Boolean).join(' · ') +
+        '</div></div>';
+    }
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = '<p class="muted">Request failed — please try again.</p>';
+  }
+});
+</script>
+
+</body>
+</html>
