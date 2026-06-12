@@ -1,7 +1,7 @@
 # UST Library Search × Claude — MCP Proof of Concept
 
 An [MCP](https://modelcontextprotocol.io) server that lets AI assistants (Claude
-first; the protocol is vendor-neutral) search the University of St. Thomas
+for now, but the protocol is vendor-neutral) search the University of St. Thomas
 library catalog directly, so answers come from the library's curated records
 with permalinks back to the real items.
 
@@ -28,18 +28,9 @@ Claude  ──MCP (streamable HTTP)──►  this server  ──HTTPS──► 
 
 No credentials, no database, no stored queries.
 
-## Run locally
-
-```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python app.py          # http://localhost:8080  (MCP endpoint at /mcp)
-```
-
 ## Deploy
 
-Mirrors the sep-copyediting-assistant recipe: Google Cloud Run, deployed on
-push to `main` via GitHub Actions + Workload Identity Federation
+Google Cloud Run, deployed on push to `main` via GitHub Actions + Workload Identity Federation
 (`.github/workflows/deploy.yml`). Manual deploy:
 
 ```bash
