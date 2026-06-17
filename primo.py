@@ -30,6 +30,21 @@ SCOPES = {
 FIELDS = {"any", "title", "creator", "subject"}
 _FIELD_TO_PRIMO = {"any": "any", "title": "title", "creator": "creator", "subject": "sub"}
 
+# Friendly sort tokens -> Primo "sort" values. "relevance" is Primo's default
+# (rank) and is left off the query entirely.
+SORTS = {"relevance": "rank", "newest": "date_d", "oldest": "date_a"}
+
+# Resource-type facet values (Primo "rtype"). The CDI-leaning ones mostly live
+# in the Central Discovery Index rather than UST's holdings, so requesting them
+# implies the blended scope (see search()).
+RESOURCE_TYPES = {
+    "books", "articles", "book_chapters", "journals",
+    "dissertations", "reviews", "newspaper_articles", "audio_video",
+}
+_CDI_RESOURCE_TYPES = {
+    "articles", "book_chapters", "reviews", "newspaper_articles", "dissertations",
+}
+
 MAX_LIMIT = 25
 
 _HEADERS = {
@@ -130,6 +145,8 @@ async def search(
     query: str,
     field: str = "any",
     scope: str = "ust",
+    sort: str = "relevance",
+    resource_type: str | None = None,
     limit: int = 10,
     offset: int = 0,
 ) -> dict:
@@ -138,6 +155,17 @@ async def search(
         raise ValueError(f"field must be one of {sorted(FIELDS)}")
     if scope not in SCOPES:
         raise ValueError(f"scope must be one of {sorted(SCOPES)}")
+    if sort not in SORTS:
+        raise ValueError(f"sort must be one of {sorted(SORTS)}")
+    if resource_type is not None:
+        resource_type = resource_type.lower()
+        if resource_type not in RESOURCE_TYPES:
+            raise ValueError(f"resource_type must be one of {sorted(RESOURCE_TYPES)}")
+        # Articles and the like mostly live in the Central Discovery Index, so the
+        # facet has nothing to filter under the local-only scope; escalate to the
+        # blended scope unless the caller already chose one explicitly.
+        if resource_type in _CDI_RESOURCE_TYPES and scope == "ust":
+            scope = "ust_plus_articles"
     limit = max(1, min(int(limit), MAX_LIMIT))
     offset = max(0, int(offset))
 
@@ -150,6 +178,11 @@ async def search(
         ("limit", str(limit)),
         ("lang", "en"),
     ]
+    if sort != "relevance":
+        params.append(("sort", SORTS[sort]))
+    if resource_type is not None:
+        params.append(("qInclude", f"facet_rtype,exact,{resource_type}"))
+
     async with httpx.AsyncClient(headers=_HEADERS, timeout=30) as client:
         resp = await client.get(f"{DISCOVERY_HOST}{SEARCH_PATH}", params=params)
         resp.raise_for_status()
@@ -161,11 +194,14 @@ async def search(
         "query": query,
         "field": field,
         "scope": scope,
+        "sort": sort,
         "total_ust_records": info.get("totalResultsLocal"),
         "offset": offset,
         "returned": len(docs),
         "records": [normalize_record(d) for d in docs],
     }
+    if resource_type is not None:
+        result["resource_type"] = resource_type
     if scope == "ust_plus_articles":
         result["total_central_index_records"] = info.get("totalResultsPC")
     return result
